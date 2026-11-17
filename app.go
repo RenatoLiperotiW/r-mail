@@ -476,6 +476,52 @@ func (a *App) Delete(folder string, uid uint32) error {
 	})
 }
 
+// Search cerca sul server di Gmail. folder vuoto = tutta la posta.
+// from filtra per mittente, query cerca in oggetto, mittente e testo.
+func (a *App) Search(folder, query, from string, limit int) ([]MailSummary, error) {
+	if folder == "" {
+		folder = "all"
+	}
+	if limit <= 0 || limit > 300 {
+		limit = 100
+	}
+	query, from = strings.TrimSpace(query), strings.TrimSpace(from)
+	out := []MailSummary{}
+	err := a.withMailbox(folder, true, func(c *client.Client, _ *imap.MailboxStatus) error {
+		crit := imap.NewSearchCriteria()
+		if from != "" {
+			crit.Header.Add("From", from)
+		}
+		if query != "" {
+			crit.Text = []string{query}
+		}
+		uids, err := c.UidSearch(crit)
+		if err != nil {
+			return err
+		}
+		if len(uids) == 0 {
+			return nil
+		}
+		sort.Slice(uids, func(i, j int) bool { return uids[i] < uids[j] })
+		if len(uids) > limit {
+			uids = uids[len(uids)-limit:]
+		}
+		set := new(imap.SeqSet)
+		set.AddNum(uids...)
+		ch := make(chan *imap.Message, len(uids))
+		done := make(chan error, 1)
+		go func() {
+			done <- c.UidFetch(set, []imap.FetchItem{imap.FetchEnvelope, imap.FetchFlags, imap.FetchUid, imap.FetchInternalDate}, ch)
+		}()
+		for m := range ch {
+			out = append(out, summaryOf(m))
+		}
+		return <-done
+	})
+	sort.Slice(out, func(i, j int) bool { return out[i].Date > out[j].Date })
+	return out, err
+}
+
 // MarkSpam sposta la mail nello spam.
 func (a *App) MarkSpam(folder string, uid uint32) error { return a.moveTo(folder, uid, "spam") }
 
@@ -623,7 +669,7 @@ func (a *App) Send(to, subject, body string) error {
 	msg.WriteString("MIME-Version: 1.0\r\n")
 	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 	msg.WriteString("Content-Transfer-Encoding: 8bit\r\n")
-	msg.WriteString("X-Mailer: R-Mail 0.2\r\n\r\n")
+	msg.WriteString("X-Mailer: R-Mail 0.3\r\n\r\n")
 	msg.WriteString(body + "\r\n")
 
 	conn, err := tls.Dial("tcp", smtpAddr, &tls.Config{ServerName: smtpHost})

@@ -23,6 +23,8 @@ const ICONS = {
   move: "M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 12v-3h-4v-4h4V8l5 5-5 5z",
   group: "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
   add: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
+  filter: "M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z",
+  thread: "M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z",
 };
 
 const FOLDERS = [
@@ -33,7 +35,7 @@ const FOLDERS = [
   { id: "trash", name: "Cestino", icon: "trash" },
 ];
 
-const state = { folder: "inbox", mails: [], open: null, filter: "", account: null, loading: 0, labels: [], groups: {} };
+const state = { folder: "inbox", mails: [], open: null, filter: "", account: null, loading: 0, labels: [], groups: {}, quick: new Set(), threads: false, search: null };
 
 const $ = (s) => document.querySelector(s);
 const api = () => window.go.main.App;
@@ -151,6 +153,7 @@ function setUnread(n) { lastUnread = n; renderNav(n); }
 
 function selectFolder(id) {
   state.folder = id;
+  state.search = null;
   renderNav(lastUnread);
   $("#folderTitle").textContent = folderName(id);
   closeRead();
@@ -162,7 +165,8 @@ async function loadList() {
   $("#list").innerHTML = '<div class="skeleton"></div>'.repeat(8);
   $("#listCount").textContent = "";
   try {
-    const mails = await api().FetchList(state.folder, 50);
+    const s = state.search;
+    const mails = s ? await api().Search("", s.q || "", s.from || "", 150) : await api().FetchList(state.folder, 50);
     if (ticket !== state.loading) return; // nel frattempo hai cambiato cartella
     state.mails = mails || [];
     renderList();
@@ -172,10 +176,47 @@ async function loadList() {
   }
 }
 
-function renderList() {
+const normSubject = (s) => String(s || "").replace(/^\s*((re|r|fwd?|i|inoltro)\s*:\s*)+/i, "").trim().toLowerCase();
+
+function applyFilters(mails) {
   const q = state.filter.toLowerCase();
-  const list = q ? state.mails.filter((m) => (m.from + " " + m.fromAddr + " " + m.subject).toLowerCase().includes(q)) : state.mails;
-  $("#listCount").textContent = list.length ? `${list.length} messaggi` : "";
+  const now = new Date(), today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return mails.filter((m) => {
+    if (q && !(m.from + " " + m.fromAddr + " " + m.subject).toLowerCase().includes(q)) return false;
+    if (state.quick.has("unread") && m.seen) return false;
+    if (state.quick.has("starred") && !m.starred) return false;
+    const d = new Date(m.date);
+    if (state.quick.has("today") && d < today) return false;
+    if (state.quick.has("week") && d < new Date(today - 6 * 86400000)) return false;
+    return true;
+  });
+}
+
+// Raggruppa per argomento: stesso oggetto (senza Re:/Fwd:) = una conversazione.
+function toThreads(mails) {
+  const map = new Map();
+  for (const m of mails) {
+    const k = normSubject(m.subject) || "#" + m.uid;
+    const t = map.get(k);
+    if (t) { t.count++; if (!m.seen) t.seen = false; if (m.starred) t.starred = true; if (!t.people.includes(m.from)) t.people.push(m.from); }
+    else map.set(k, { ...m, count: 1, people: [m.from] });
+  }
+  return [...map.values()].map((t) => ({ ...t, from: t.people.slice(0, 3).join(", ") + (t.people.length > 3 ? "…" : "") }));
+}
+
+function renderChips() {
+  const chip = (k, label, ic) => `<button class="chip-btn ${state.quick.has(k) ? "on" : ""}" data-chip="${k}">${ic ? icon(ic) : ""}${label}</button>`;
+  const s = state.search;
+  const qchip = s ? `<button class="chip-btn query" data-chip="clear">${icon("filter")}${esc(s.from ? "Da: " + s.from : "“" + s.q + "”")} ✕</button>` : "";
+  $("#chips").innerHTML = qchip + chip("unread", "Non lette", "mail") + chip("starred", "Speciali", "star") + chip("today", "Oggi") + chip("week", "Questa settimana") +
+    `<button class="chip-btn ${state.threads ? "on" : ""}" data-chip="threads">${icon("thread")}Per argomento</button>`;
+}
+
+function renderList() {
+  renderChips();
+  let list = applyFilters(state.mails);
+  if (state.threads) list = toThreads(list);
+  $("#listCount").textContent = list.length ? `${list.length} ${state.threads ? "conversazioni" : "messaggi"}` : "";
   if (!list.length) {
     $("#list").innerHTML = `<div class="empty"><div class="big-ic">${icon("mail")}</div>${q ? "Nessun risultato" : "Qui non c'è niente"}</div>`;
     return;
@@ -189,7 +230,7 @@ function renderList() {
     <div class="row ${m.seen ? "" : "unread"}" data-uid="${m.uid}">
       <button class="icon-btn sm star ${m.starred ? "on" : ""}" data-act="star" title="Speciale">${icon("star")}</button>
       <div class="avatar sm" data-av="${esc(m.from)}"></div>
-      <div class="from">${esc(m.from)}</div>
+      <div class="from">${esc(m.from)}${m.count > 1 ? `<span class="count">${m.count}</span>` : ""}</div>
       <div class="subject">${esc(m.subject)}</div>
       <div class="date">${fmtDate(m.date)}</div>
       <div class="hover-actions">
@@ -216,6 +257,8 @@ async function rowAction(act, uid, rowEl) {
       await api().SetSeen(state.folder, uid, !m.seen);
       m.seen = !m.seen;
       renderList();
+    } else if (act === "archive" && state.search) {
+      toast("Nei risultati di ricerca le mail sono già in \"Tutti i messaggi\"");
     } else if (act === "archive") {
       await api().Archive(state.folder, uid);
       removeRow(uid, rowEl); toast("Conversazione archiviata");
@@ -463,6 +506,16 @@ function openWheel(x, y, title, items) {
 }
 function closeWheel() { $("#wheelLayer").classList.add("hidden"); $("#wheel").classList.remove("open"); }
 
+function searchServer({ q = "", from = "", label = "" }) {
+  state.search = { q, from: from, label };
+  state.filter = ""; $("#search").value = "";
+  if (state.open) closeRead();
+  $("#folderTitle").textContent = from ? `Da: ${label || from}` : `Risultati per “${q}”`;
+  document.querySelectorAll(".nav-item.active").forEach((b) => b.classList.remove("active"));
+  state.folder = "all";
+  loadList();
+}
+
 function onContextMenu(e) {
   if (e.target.closest("input, textarea, #compose, .modal, #login")) return; // lì resta il menu normale
   e.preventDefault();
@@ -472,6 +525,7 @@ function onContextMenu(e) {
     const uid = Number(row.dataset.uid), m = findMail(uid);
     const go = (act) => () => rowAction(act, uid, row);
     return openWheel(e.clientX, e.clientY, m.from, [
+      { icon: "filter", label: "Tutte da " + m.from, run: () => searchServer({ from: m.fromAddr, label: m.from }) },
       { icon: "reply", label: "Rispondi", run: go("reply") },
       { icon: "forward", label: "Inoltra", run: go("forward") },
       { icon: "star", label: m.starred ? "Togli da speciali" : "Speciale", run: go("star") },
@@ -528,6 +582,19 @@ function wire() {
     if (b) selectFolder(b.dataset.folder);
   });
   document.addEventListener("contextmenu", onContextMenu);
+  $("#chips").addEventListener("click", (e) => {
+    const c = e.target.closest("[data-chip]"); if (!c) return;
+    const k = c.dataset.chip;
+    if (k === "clear") return selectFolder("inbox");
+    if (k === "threads") state.threads = !state.threads;
+    else if (state.quick.has(k)) state.quick.delete(k);
+    else { state.quick.add(k); if (k === "today") state.quick.delete("week"); if (k === "week") state.quick.delete("today"); }
+    renderList();
+  });
+  $("#search").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && e.target.value.trim()) { const q = e.target.value.trim(); searchServer({ q }); }
+    if (e.key === "Escape") { e.target.value = ""; state.filter = ""; renderList(); }
+  });
   $("#wheelLayer").addEventListener("click", closeWheel);
   $("#wheelLayer").addEventListener("contextmenu", (e) => { e.preventDefault(); closeWheel(); });
   $("#mOk").addEventListener("click", () => closeModal(true));

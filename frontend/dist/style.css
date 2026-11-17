@@ -266,3 +266,15 @@ input, textarea, button { font: inherit; color: inherit; }
 .modal .pick button { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 0; border-radius: 14px; background: transparent; cursor: pointer; text-align: left; }
 .modal .pick button:hover { background: var(--hover); }
 .modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+
+/* ---------- filtri ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 2px 24px 10px; position: sticky; top: 52px; background: var(--surface); z-index: 1; }
+.chip-btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: 999px;
+  border: 1px solid var(--border); background: transparent; cursor: pointer; font-size: 13px; transition: background .15s, border-color .15s;
+}
+.chip-btn:hover { background: var(--hover); }
+.chip-btn.on { background: var(--primary-soft); border-color: transparent; font-weight: 600; }
+.chip-btn .ic { width: 16px; height: 16px; }
+.chip-btn.query { background: var(--primary); color: var(--on-primary); border-color: transparent; font-weight: 600; }
+.count { display: inline-grid; place-items: center; min-width: 22px; height: 20px; padding: 0 6px; margin-left: 6px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 11.5px; font-weight: 700; vertical-align: 1px; }
