@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>R-Mail</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ===== Accesso ===== -->
+  <div id="login" class="login hidden">
+    <form id="loginForm" class="login-card">
+      <div class="logo big"><span>R</span></div>
+      <h1>Benvenuto in R-Mail</h1>
+      <p class="muted">La posta di mio-os. Collega il tuo account Gmail.</p>
+
+      <label>Il tuo nome
+        <input id="lgName" type="text" placeholder="Es. Renato" autocomplete="name">
+      </label>
+      <label>Indirizzo Gmail
+        <input id="lgEmail" type="email" placeholder="nome@gmail.com" required autocomplete="email">
+      </label>
+      <label>Password per le app
+        <input id="lgPass" type="password" placeholder="xxxx xxxx xxxx xxxx" required>
+      </label>
+
+      <p class="hint">
+        Non usare la password normale di Google: serve una <b>password per le app</b>
+        (16 lettere). Si crea qui:
+        <a href="#" id="lgHelp">myaccount.google.com/apppasswords</a>
+        (serve la verifica in due passaggi attiva).
+      </p>
+
+      <p id="lgError" class="error hidden"></p>
+      <button id="lgBtn" class="btn primary wide" type="submit">Accedi</button>
+    </form>
+  </div>
+
+  <!-- ===== App ===== -->
+  <div id="app" class="app hidden">
+    <aside class="sidebar">
+      <div class="brand"><div class="logo"><span>R</span></div><b>R-Mail</b></div>
+      <button id="composeBtn" class="compose-btn"></button>
+      <nav id="nav"></nav>
+      <div class="account">
+        <div id="accAvatar" class="avatar sm"></div>
+        <div class="acc-text"><div id="accName"></div><div id="accEmail" class="muted small"></div></div>
+        <button id="logoutBtn" class="icon-btn" title="Esci"></button>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="search">
+          <span id="searchIcon"></span>
+          <input id="search" type="search" placeholder="Cerca nella posta">
+        </div>
+        <button id="refreshBtn" class="icon-btn" title="Aggiorna"></button>
+      </header>
+
+      <section id="listView" class="card">
+        <div class="list-head">
+          <h2 id="folderTitle">Posta in arrivo</h2>
+          <span id="listCount" class="muted small"></span>
+        </div>
+        <div id="list" class="list"></div>
+      </section>
+
+      <section id="readView" class="card read hidden">
+        <div class="read-toolbar">
+          <button id="backBtn" class="icon-btn" title="Indietro (Esc)"></button>
+          <div class="spacer"></div>
+          <button id="rArchive" class="icon-btn" title="Archivia"></button>
+          <button id="rDelete" class="icon-btn" title="Elimina"></button>
+          <button id="rUnread" class="icon-btn" title="Segna come da leggere"></button>
+          <button id="rStar" class="icon-btn" title="Speciale"></button>
+        </div>
+        <div class="read-body">
+          <h1 id="rSubject"></h1>
+          <div class="sender">
+            <div id="rAvatar" class="avatar"></div>
+            <div class="sender-text">
+              <div><b id="rFrom"></b> <span id="rFromAddr" class="muted small"></span></div>
+              <div class="muted small">a <span id="rTo"></span></div>
+            </div>
+            <div id="rDate" class="muted small"></div>
+          </div>
+          <div id="rAttach" class="attachments"></div>
+          <div class="paper"><iframe id="rFrame" sandbox="allow-same-origin" title="Contenuto della mail"></iframe></div>
+          <div class="reply-row">
+            <button id="rReply" class="btn outline"></button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ===== Nuovo messaggio ===== -->
+  <div id="compose" class="compose hidden">
+    <div class="compose-head">
+      <span>Nuovo messaggio</span>
+      <div>
+        <button id="cMin" class="icon-btn sm" title="Riduci"></button>
+        <button id="cClose" class="icon-btn sm" title="Chiudi"></button>
+      </div>
+    </div>
+    <div class="compose-body">
+      <input id="cTo" type="text" placeholder="A">
+      <input id="cSubject" type="text" placeholder="Oggetto">
+      <textarea id="cText" placeholder="Scrivi il tuo messaggio…"></textarea>
+    </div>
+    <div class="compose-foot">
+      <button id="cSend" class="btn primary">Invia</button>
+      <span class="muted small">Ctrl + Invio per inviare</span>
+    </div>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
