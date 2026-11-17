@@ -218,7 +218,7 @@ function renderList() {
   if (state.threads) list = toThreads(list);
   $("#listCount").textContent = list.length ? `${list.length} ${state.threads ? "conversazioni" : "messaggi"}` : "";
   if (!list.length) {
-    $("#list").innerHTML = `<div class="empty"><div class="big-ic">${icon("mail")}</div>${q ? "Nessun risultato" : "Qui non c'è niente"}</div>`;
+    $("#list").innerHTML = `<div class="empty"><div class="big-ic">${icon("mail")}</div>${state.filter || state.quick.size ? "Nessun risultato" : "Qui non c'è niente"}</div>`;
     return;
   }
   let lastDay = "";
