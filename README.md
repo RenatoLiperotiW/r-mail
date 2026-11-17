@@ -1,4 +1,4 @@
-# R-Mail 0.1
+# R-Mail 0.2
 
 La posta di **mio-os**: un client Gmail leggero, arrotondato, con tema chiaro e scuro automatico.
 Fatto con **Go** (motore IMAP/SMTP) + **Wails** (interfaccia in HTML/CSS/JS, senza Node).

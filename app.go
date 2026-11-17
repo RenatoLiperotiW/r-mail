@@ -228,6 +228,9 @@ func mailboxFor(c *client.Client, folder string) (string, error) {
 	if folder == "" || folder == "inbox" {
 		return "INBOX", nil
 	}
+	if strings.HasPrefix(folder, "label:") {
+		return strings.TrimPrefix(folder, "label:"), nil
+	}
 	want, ok := folderAttr[folder]
 	if !ok {
 		return "", fmt.Errorf("cartella sconosciuta: %s", folder)
@@ -303,7 +306,7 @@ func summaryOf(m *imap.Message) MailSummary {
 	if s.Subject == "" {
 		s.Subject = "(nessun oggetto)"
 	}
-	s.Date = date.Format(time.RFC3339)
+	s.Date = date.UTC().Format(time.RFC3339)
 	return s
 }
 
@@ -473,6 +476,111 @@ func (a *App) Delete(folder string, uid uint32) error {
 	})
 }
 
+// MarkSpam sposta la mail nello spam.
+func (a *App) MarkSpam(folder string, uid uint32) error { return a.moveTo(folder, uid, "spam") }
+
+// MoveToLabel sposta la mail in una cartella (etichetta di Gmail).
+func (a *App) MoveToLabel(folder string, uid uint32, label string) error {
+	return a.moveTo(folder, uid, "label:"+label)
+}
+
+// ---------- Cartelle (etichette di Gmail) ----------
+
+// ListLabels restituisce le cartelle create dall'utente.
+func (a *App) ListLabels() ([]string, error) {
+	acc, pass, err := a.creds()
+	if err != nil {
+		return nil, err
+	}
+	c, err := dialIMAP(acc.Email, pass)
+	if err != nil {
+		return nil, friendly(err)
+	}
+	defer c.Logout()
+	ch := make(chan *imap.MailboxInfo, 64)
+	done := make(chan error, 1)
+	go func() { done <- c.List("", "*", ch) }()
+	out := []string{}
+	for m := range ch {
+		if m.Name == "INBOX" || strings.HasPrefix(m.Name, "[Gmail]") || hasFlag(m.Attributes, `\Noselect`) {
+			continue
+		}
+		out = append(out, m.Name)
+	}
+	sort.Strings(out)
+	return out, <-done
+}
+
+// CreateLabel crea una nuova cartella.
+func (a *App) CreateLabel(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("Scrivi un nome per la cartella")
+	}
+	acc, pass, err := a.creds()
+	if err != nil {
+		return err
+	}
+	c, err := dialIMAP(acc.Email, pass)
+	if err != nil {
+		return friendly(err)
+	}
+	defer c.Logout()
+	return c.Create(name)
+}
+
+// ---------- Gruppi di contatti (salvati sul PC) ----------
+
+func groupsPath() (string, error) {
+	p, err := configPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(p), "groups.json"), nil
+}
+
+// GetGroups restituisce i gruppi: nome -> indirizzi.
+func (a *App) GetGroups() map[string][]string {
+	out := map[string][]string{}
+	if p, err := groupsPath(); err == nil {
+		if b, err := os.ReadFile(p); err == nil {
+			_ = json.Unmarshal(b, &out)
+		}
+	}
+	return out
+}
+
+// SaveGroup crea o aggiorna un gruppo (indirizzi separati da virgola).
+func (a *App) SaveGroup(name, emails string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return errors.New("Scrivi un nome per il gruppo")
+	}
+	list, err := splitRecipients(emails)
+	if err != nil {
+		return err
+	}
+	g := a.GetGroups()
+	g[name] = list
+	return writeGroups(g)
+}
+
+// DeleteGroup elimina un gruppo.
+func (a *App) DeleteGroup(name string) error {
+	g := a.GetGroups()
+	delete(g, name)
+	return writeGroups(g)
+}
+
+func writeGroups(g map[string][]string) error {
+	p, err := groupsPath()
+	if err != nil {
+		return err
+	}
+	b, _ := json.MarshalIndent(g, "", "  ")
+	return os.WriteFile(p, b, 0o600)
+}
+
 // ---------- SMTP ----------
 
 func splitRecipients(s string) ([]string, error) {
@@ -515,7 +623,7 @@ func (a *App) Send(to, subject, body string) error {
 	msg.WriteString("MIME-Version: 1.0\r\n")
 	msg.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
 	msg.WriteString("Content-Transfer-Encoding: 8bit\r\n")
-	msg.WriteString("X-Mailer: R-Mail 0.1.1\r\n\r\n")
+	msg.WriteString("X-Mailer: R-Mail 0.2\r\n\r\n")
 	msg.WriteString(body + "\r\n")
 
 	conn, err := tls.Dial("tcp", smtpAddr, &tls.Config{ServerName: smtpHost})

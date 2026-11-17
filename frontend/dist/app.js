@@ -17,6 +17,12 @@ const ICONS = {
   logout: "M10.09 15.59L11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 0 0-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z",
   attach: "M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z",
   reply: "M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z",
+  forward: "M14 9V5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11z",
+  folder: "M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z",
+  newfolder: "M20 6h-8l-2-2H4c-1.11 0-1.99.89-1.99 2L2 18c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-1 8h-3v3h-2v-3h-3v-2h3V9h2v3h3v2z",
+  move: "M20 6h-8l-2-2H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6 12v-3h-4v-4h4V8l5 5-5 5z",
+  group: "M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z",
+  add: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z",
 };
 
 const FOLDERS = [
@@ -27,7 +33,7 @@ const FOLDERS = [
   { id: "trash", name: "Cestino", icon: "trash" },
 ];
 
-const state = { folder: "inbox", mails: [], open: null, filter: "", account: null, loading: 0 };
+const state = { folder: "inbox", mails: [], open: null, filter: "", account: null, loading: 0, labels: [], groups: {} };
 
 const $ = (s) => document.querySelector(s);
 const api = () => window.go.main.App;
@@ -48,6 +54,17 @@ function fmtDate(iso) {
   if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" });
   if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString("it-IT", { day: "numeric", month: "short" });
   return d.toLocaleDateString("it-IT");
+}
+function dayLabel(iso) {
+  const d = new Date(iso), now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const diff = (start - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000;
+  if (diff <= 0) return "Oggi";
+  if (diff === 1) return "Ieri";
+  if (diff < 7) return "Questa settimana";
+  if (d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()) return "Questo mese";
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString("it-IT", { month: "long" }).replace(/^./, (c) => c.toUpperCase());
+  return String(d.getFullYear());
 }
 const fmtLong = (iso) => (iso ? new Date(iso).toLocaleString("it-IT", { dateStyle: "full", timeStyle: "short" }) : "");
 
@@ -100,14 +117,34 @@ function showApp(acc) {
   $("#accEmail").textContent = acc.email;
   avatar($("#accAvatar"), acc.name || acc.email);
   selectFolder("inbox");
+  loadMeta();
 }
 
 function renderNav(unread) {
-  $("#nav").innerHTML = FOLDERS.map((f) => `
+  const main = FOLDERS.map((f) => `
     <button class="nav-item ${f.id === state.folder ? "active" : ""}" data-folder="${f.id}">
       ${icon(f.icon)}<span class="label">${f.name}</span>
       ${f.id === "inbox" && unread ? `<span class="badge">${unread}</span>` : ""}
     </button>`).join("");
+  const labels = state.labels.map((l) => `
+    <button class="nav-item ${"label:" + l === state.folder ? "active" : ""}" data-folder="label:${esc(l)}">
+      <span class="dot" style="background:hsl(${hue(l)} 60% 55%)"></span><span class="label">${esc(l)}</span>
+    </button>`).join("");
+  const groups = Object.keys(state.groups).sort().map((g) => `
+    <button class="nav-item" data-group="${esc(g)}" title="${esc(state.groups[g].join(", "))}">
+      ${icon("group")}<span class="label">${esc(g)}</span><span class="badge muted">${state.groups[g].length}</span>
+    </button>`).join("");
+  $("#nav").innerHTML = main +
+    `<div class="nav-section">Cartelle<button class="icon-btn" data-act="newfolder" title="Nuova cartella">${icon("add")}</button></div>` + labels +
+    `<div class="nav-section">Gruppi<button class="icon-btn" data-act="newgroup" title="Nuovo gruppo">${icon("add")}</button></div>` + groups;
+}
+
+const folderName = (id) => (id.startsWith("label:") ? id.slice(6) : FOLDERS.find((f) => f.id === id).name);
+
+async function loadMeta() {
+  try { state.labels = await api().ListLabels(); } catch (e) { state.labels = []; }
+  try { state.groups = (await api().GetGroups()) || {}; } catch (e) { state.groups = {}; }
+  renderNav(lastUnread);
 }
 let lastUnread = 0;
 function setUnread(n) { lastUnread = n; renderNav(n); }
@@ -115,7 +152,7 @@ function setUnread(n) { lastUnread = n; renderNav(n); }
 function selectFolder(id) {
   state.folder = id;
   renderNav(lastUnread);
-  $("#folderTitle").textContent = FOLDERS.find((f) => f.id === id).name;
+  $("#folderTitle").textContent = folderName(id);
   closeRead();
   loadList();
 }
@@ -143,7 +180,12 @@ function renderList() {
     $("#list").innerHTML = `<div class="empty"><div class="big-ic">${icon("mail")}</div>${q ? "Nessun risultato" : "Qui non c'è niente"}</div>`;
     return;
   }
-  $("#list").innerHTML = list.map((m) => `
+  let lastDay = "";
+  $("#list").innerHTML = list.map((m) => {
+    const day = dayLabel(m.date);
+    const head = day !== lastDay ? `<div class="day-head">${day}</div>` : "";
+    lastDay = day;
+    return head + `
     <div class="row ${m.seen ? "" : "unread"}" data-uid="${m.uid}">
       <button class="icon-btn sm star ${m.starred ? "on" : ""}" data-act="star" title="Speciale">${icon("star")}</button>
       <div class="avatar sm" data-av="${esc(m.from)}"></div>
@@ -155,7 +197,8 @@ function renderList() {
         <button class="icon-btn sm" data-act="delete" title="Elimina">${icon("trash")}</button>
         <button class="icon-btn sm" data-act="unread" title="${m.seen ? "Segna come da leggere" : "Segna come letta"}">${icon("mail")}</button>
       </div>
-    </div>`).join("");
+    </div>`;
+  }).join("");
   document.querySelectorAll("#list [data-av]").forEach((el) => avatar(el, el.dataset.av));
 }
 
@@ -176,6 +219,20 @@ async function rowAction(act, uid, rowEl) {
     } else if (act === "archive") {
       await api().Archive(state.folder, uid);
       removeRow(uid, rowEl); toast("Conversazione archiviata");
+    } else if (act === "reply" || act === "forward") {
+      const f = await api().OpenMail(state.folder, uid);
+      state.openFull = f;
+      if (m && !m.seen) { m.seen = true; renderList(); }
+      act === "reply" ? reply() : forward();
+      return;
+    } else if (act === "spam") {
+      await api().MarkSpam(state.folder, uid);
+      removeRow(uid, rowEl); toast("Segnalata come spam");
+    } else if (act === "move") {
+      const label = await pickLabel();
+      if (!label) return;
+      await api().MoveToLabel(state.folder, uid, label);
+      removeRow(uid, rowEl); toast(`Spostata in "${label}"`);
     } else if (act === "delete") {
       await api().Delete(state.folder, uid);
       removeRow(uid, rowEl); toast(state.folder === "trash" ? "Eliminata definitivamente" : "Spostata nel cestino");
@@ -296,6 +353,154 @@ function reply() {
   openCompose(f.fromAddr, subj, `\n\nIl ${fmtLong(f.date)}, ${f.from} ha scritto:\n${quoted}`);
 }
 
+function forward() {
+  const f = state.openFull;
+  if (!f) return;
+  const subj = /^(fwd?|i):/i.test(f.subject) ? f.subject : "Fwd: " + f.subject;
+  openCompose("", subj, `\n\n---------- Messaggio inoltrato ----------\nDa: ${f.from} <${f.fromAddr}>\nData: ${fmtLong(f.date)}\nOggetto: ${f.subject}\nA: ${f.to}\n\n${f.text || "(messaggio in formato HTML)"}`);
+}
+
+// ---------- Finestrelle ----------
+let modalDone = null;
+function modal(title, bodyHTML, okText = "OK", showOk = true) {
+  $("#mTitle").textContent = title;
+  $("#mBody").innerHTML = bodyHTML;
+  $("#mOk").textContent = okText;
+  $("#mOk").classList.toggle("hidden", !showOk);
+  $("#modalLayer").classList.remove("hidden");
+  const first = $("#mBody input, #mBody textarea");
+  if (first) setTimeout(() => first.focus(), 30);
+  return new Promise((res) => (modalDone = res));
+}
+function closeModal(value) {
+  $("#modalLayer").classList.add("hidden");
+  const d = modalDone; modalDone = null;
+  if (d) d(value);
+}
+
+async function askFields(title, fields, okText) {
+  const html = fields.map((f) => f.multi
+    ? `<textarea data-k="${f.k}" rows="3" placeholder="${esc(f.ph)}">${esc(f.v || "")}</textarea>`
+    : `<input data-k="${f.k}" placeholder="${esc(f.ph)}" value="${esc(f.v || "")}">`).join("");
+  const ok = await modal(title, html, okText);
+  if (!ok) return null;
+  const out = {};
+  document.querySelectorAll("#mBody [data-k]").forEach((el) => (out[el.dataset.k] = el.value));
+  return out;
+}
+
+function pickFrom(title, options) {
+  const html = `<div class="pick">${options.map((o, i) => `<button data-i="${i}">${icon(o.icon)}<span>${esc(o.label)}</span></button>`).join("")}</div>`;
+  const p = modal(title, html, "", false);
+  document.querySelectorAll("#mBody [data-i]").forEach((b) => b.addEventListener("click", () => closeModal(options[Number(b.dataset.i)].value)));
+  return p;
+}
+
+async function newFolder() {
+  const r = await askFields("Nuova cartella", [{ k: "name", ph: "Nome della cartella" }], "Crea");
+  if (!r || !r.name.trim()) return null;
+  try { await api().CreateLabel(r.name.trim()); await loadMeta(); toast(`Cartella "${r.name.trim()}" creata`); return r.name.trim(); }
+  catch (e) { toast(errText(e), true); return null; }
+}
+
+async function pickLabel() {
+  const opts = state.labels.map((l) => ({ label: l, value: l, icon: "folder" }));
+  opts.push({ label: "Nuova cartella…", value: "__new__", icon: "newfolder" });
+  const v = await pickFrom("Sposta in…", opts);
+  return v === "__new__" ? await newFolder() : v;
+}
+
+async function editGroup(name = "") {
+  const r = await askFields(name ? "Modifica gruppo" : "Nuovo gruppo", [
+    { k: "name", ph: "Nome del gruppo (es. Amici Magic)", v: name },
+    { k: "emails", ph: "Indirizzi separati da virgola", v: name ? state.groups[name].join(", ") : "", multi: true },
+  ], "Salva");
+  if (!r) return;
+  try {
+    if (name && r.name.trim() !== name) await api().DeleteGroup(name);
+    await api().SaveGroup(r.name, r.emails);
+    await loadMeta(); toast("Gruppo salvato");
+  } catch (e) { toast(errText(e), true); }
+}
+
+function writeToGroup(name) {
+  const g = state.groups[name];
+  if (g) openCompose(g.join(", "));
+}
+
+async function pickGroupAndWrite() {
+  const names = Object.keys(state.groups).sort();
+  if (!names.length) { toast("Non hai ancora gruppi: creane uno"); return editGroup(); }
+  const v = await pickFrom("Scrivi a un gruppo", names.map((n) => ({ label: n, value: n, icon: "group" })));
+  if (v) writeToGroup(v);
+}
+
+// ---------- Ruota degli strumenti ----------
+function openWheel(x, y, title, items) {
+  const R = items.length > 6 ? 104 : 92;
+  x = Math.min(Math.max(x, R + 40), innerWidth - R - 40);
+  y = Math.min(Math.max(y, R + 40), innerHeight - R - 40);
+  const wheel = $("#wheel"), center = $("#wheelCenter");
+  wheel.classList.remove("open");
+  wheel.style.left = x + "px"; wheel.style.top = y + "px";
+  wheel.querySelectorAll(".wheel-item").forEach((b) => b.remove());
+  center.textContent = title;
+  items.forEach((it, i) => {
+    const a = -Math.PI / 2 + (2 * Math.PI * i) / items.length;
+    const b = document.createElement("button");
+    b.className = "wheel-item" + (it.danger ? " danger" : "");
+    b.style.setProperty("--x", Math.cos(a) * R + "px");
+    b.style.setProperty("--y", Math.sin(a) * R + "px");
+    b.style.transitionDelay = i * 18 + "ms";
+    b.innerHTML = icon(it.icon);
+    b.addEventListener("mouseenter", () => (center.textContent = it.label));
+    b.addEventListener("mouseleave", () => (center.textContent = title));
+    b.addEventListener("click", (e) => { e.stopPropagation(); closeWheel(); it.run(); });
+    wheel.appendChild(b);
+  });
+  $("#wheelLayer").classList.remove("hidden");
+  requestAnimationFrame(() => requestAnimationFrame(() => wheel.classList.add("open")));
+}
+function closeWheel() { $("#wheelLayer").classList.add("hidden"); $("#wheel").classList.remove("open"); }
+
+function onContextMenu(e) {
+  if (e.target.closest("input, textarea, #compose, .modal, #login")) return; // lì resta il menu normale
+  e.preventDefault();
+  if ($("#app").classList.contains("hidden")) return;
+  const row = e.target.closest(".row");
+  if (row) {
+    const uid = Number(row.dataset.uid), m = findMail(uid);
+    const go = (act) => () => rowAction(act, uid, row);
+    return openWheel(e.clientX, e.clientY, m.from, [
+      { icon: "reply", label: "Rispondi", run: go("reply") },
+      { icon: "forward", label: "Inoltra", run: go("forward") },
+      { icon: "star", label: m.starred ? "Togli da speciali" : "Speciale", run: go("star") },
+      { icon: "mail", label: m.seen ? "Segna da leggere" : "Segna come letta", run: go("unread") },
+      { icon: "archive", label: "Archivia", run: go("archive") },
+      { icon: "move", label: "Sposta in cartella", run: go("move") },
+      { icon: "spam", label: "Segnala spam", run: go("spam") },
+      { icon: "trash", label: "Elimina", run: go("delete"), danger: true },
+    ]);
+  }
+  const grp = e.target.closest("[data-group]");
+  if (grp) {
+    const g = grp.dataset.group;
+    return openWheel(e.clientX, e.clientY, g, [
+      { icon: "edit", label: "Scrivi al gruppo", run: () => writeToGroup(g) },
+      { icon: "group", label: "Modifica gruppo", run: () => editGroup(g) },
+      { icon: "trash", label: "Elimina gruppo", danger: true, run: async () => { await api().DeleteGroup(g); await loadMeta(); toast("Gruppo eliminato"); } },
+    ]);
+  }
+  openWheel(e.clientX, e.clientY, "R-Mail", [
+    { icon: "edit", label: "Scrivi", run: () => openCompose() },
+    { icon: "newfolder", label: "Nuova cartella", run: newFolder },
+    { icon: "group", label: "Nuovo gruppo", run: () => editGroup() },
+    { icon: "send", label: "Scrivi a un gruppo", run: pickGroupAndWrite },
+    { icon: "refresh", label: "Aggiorna", run: () => { loadList(); loadMeta(); } },
+    { icon: "search", label: "Cerca", run: () => $("#search").focus() },
+  ]);
+}
+
 // ---------- Avvio ----------
 function wire() {
   $("#composeBtn").innerHTML = `${icon("edit")}<span>Scrivi</span>`;
@@ -314,7 +519,21 @@ function wire() {
   $("#loginForm").addEventListener("submit", doLogin);
   $("#lgHelp").addEventListener("click", (e) => { e.preventDefault(); window.runtime.BrowserOpenURL("https://myaccount.google.com/apppasswords"); });
 
-  $("#nav").addEventListener("click", (e) => { const b = e.target.closest("[data-folder]"); if (b) selectFolder(b.dataset.folder); });
+  $("#nav").addEventListener("click", (e) => {
+    const act = e.target.closest("[data-act]");
+    if (act) return act.dataset.act === "newfolder" ? newFolder() : editGroup();
+    const g = e.target.closest("[data-group]");
+    if (g) return writeToGroup(g.dataset.group);
+    const b = e.target.closest("[data-folder]");
+    if (b) selectFolder(b.dataset.folder);
+  });
+  document.addEventListener("contextmenu", onContextMenu);
+  $("#wheelLayer").addEventListener("click", closeWheel);
+  $("#wheelLayer").addEventListener("contextmenu", (e) => { e.preventDefault(); closeWheel(); });
+  $("#mOk").addEventListener("click", () => closeModal(true));
+  $("#mCancel").addEventListener("click", () => closeModal(null));
+  $("#modalLayer").addEventListener("click", (e) => { if (e.target.id === "modalLayer") closeModal(null); });
+  $("#modalLayer").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName === "INPUT") closeModal(true); });
   $("#list").addEventListener("click", (e) => {
     const row = e.target.closest(".row"); if (!row) return;
     const uid = Number(row.dataset.uid);
@@ -341,7 +560,10 @@ function wire() {
   $("#compose").addEventListener("keydown", (e) => { if (e.ctrlKey && e.key === "Enter") sendMail(); });
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && state.open && $("#compose").classList.contains("hidden")) closeRead();
+    if (e.key !== "Escape") return;
+    if (!$("#wheelLayer").classList.contains("hidden")) return closeWheel();
+    if (!$("#modalLayer").classList.contains("hidden")) return closeModal(null);
+    if (state.open && $("#compose").classList.contains("hidden")) closeRead();
   });
 }
 

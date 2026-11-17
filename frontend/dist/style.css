@@ -225,3 +225,44 @@ input, textarea, button { font: inherit; color: inherit; }
 
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+
+/* ---------- sezioni della barra laterale ---------- */
+.nav-section { display: flex; align-items: center; justify-content: space-between; padding: 14px 12px 4px 20px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+.nav-section .icon-btn { width: 28px; height: 28px; }
+.nav-section .icon-btn .ic { width: 18px; height: 18px; }
+.nav-item .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; margin: 0 5px; }
+
+/* ---------- intestazioni per data nella lista ---------- */
+.day-head { padding: 14px 16px 4px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .03em; }
+
+/* ---------- ruota degli strumenti ---------- */
+.wheel-layer { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.18); backdrop-filter: blur(2px); animation: fade .15s; }
+@keyframes fade { from { opacity: 0; } }
+.wheel { position: absolute; width: 0; height: 0; }
+.wheel-center {
+  position: absolute; left: -58px; top: -58px; width: 116px; height: 116px; border-radius: 50%;
+  background: var(--surface); box-shadow: var(--shadow); display: grid; place-items: center; text-align: center;
+  padding: 14px; font-size: 13px; font-weight: 600; line-height: 1.2; animation: pop .18s ease-out;
+}
+.wheel-item {
+  position: absolute; left: -26px; top: -26px; width: 52px; height: 52px; border-radius: 50%; border: 0;
+  background: var(--surface); color: var(--text); box-shadow: var(--shadow); cursor: pointer;
+  display: grid; place-items: center; transform: translate(0, 0) scale(.3); opacity: 0;
+  transition: transform .22s cubic-bezier(.3,1.5,.5,1), opacity .18s, background .15s, color .15s;
+}
+.wheel.open .wheel-item { opacity: 1; transform: translate(var(--x), var(--y)) scale(1); }
+.wheel.open .wheel-item:hover { transform: translate(var(--x), var(--y)) scale(1.38); background: var(--primary); color: var(--on-primary); z-index: 2; }
+.wheel-item.danger:hover { background: var(--danger) !important; color: #fff !important; }
+.wheel-item .ic { width: 22px; height: 22px; }
+@keyframes pop { from { transform: scale(.4); opacity: 0; } }
+
+/* ---------- finestrella di dialogo ---------- */
+.modal-layer { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.35); display: grid; place-items: center; animation: fade .15s; }
+.modal { width: min(420px, calc(100vw - 32px)); background: var(--surface); border-radius: 24px; padding: 24px; box-shadow: var(--shadow); animation: pop .18s ease-out; user-select: text; }
+.modal h3 { margin: 0 0 16px; font-size: 18px; font-weight: 600; }
+.modal input, .modal textarea { width: 100%; border: 1px solid var(--border); background: var(--surface-2); border-radius: 14px; padding: 12px 14px; outline: none; margin-bottom: 10px; resize: vertical; }
+.modal input:focus, .modal textarea:focus { border-color: var(--primary); background: var(--surface); }
+.modal .pick { display: flex; flex-direction: column; gap: 4px; max-height: 300px; overflow: auto; }
+.modal .pick button { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 0; border-radius: 14px; background: transparent; cursor: pointer; text-align: left; }
+.modal .pick button:hover { background: var(--hover); }
+.modal-foot { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
